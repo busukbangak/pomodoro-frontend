@@ -97,11 +97,11 @@ export default function Timer() {
           // Only trigger if prev === 1 (not 0)
           if (mode === 'pomodoro' && prev === 1) {
             if (getToken()) {
-              completePomodoro()
+              completePomodoro(durations.pomodoro / 60)
                 .then(() => setMessage('Pomodoro recorded!'))
                 .catch(() => setMessage('Failed to record Pomodoro.'));
             } else {
-              incrementLocalStats();
+              incrementLocalStats(durations.pomodoro / 60);
               setMessage('Pomodoro recorded!');
             }
             // Auto-start break if enabled

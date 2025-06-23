@@ -135,7 +135,7 @@ function App() {
       const backendTimestamps = new Set(backendEntries.map(e => new Date(e.timestamp).toISOString()));
       const uniqueLocal = localEntries.filter(e => !backendTimestamps.has(new Date(e.timestamp).toISOString()));
       if (uniqueLocal.length > 0) {
-        await addCompletedPomodorosWithTimestamps(uniqueLocal.map(e => e.timestamp));
+        await addCompletedPomodorosWithTimestamps(uniqueLocal);
       }
       localStorage.removeItem(LOCAL_STATS_KEY);
     } catch {}
@@ -149,7 +149,7 @@ function App() {
       const localEntries = getLocalStatsEntries();
       await resetCompletedPomodoros();
       if (localEntries.length > 0) {
-        await addCompletedPomodorosWithTimestamps(localEntries.map(e => e.timestamp));
+        await addCompletedPomodorosWithTimestamps(localEntries);
       }
       localStorage.removeItem(LOCAL_STATS_KEY);
     } catch {}

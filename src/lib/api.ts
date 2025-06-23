@@ -51,8 +51,8 @@ export async function getCompletedPomodoros() {
 }
 
 // Record a completed pomodoro
-export async function completePomodoro() {
-  const res = await api.post('/stats/complete');
+export async function completePomodoro(pomodoroDuration?: number) {
+  const res = await api.post('/stats/complete', { pomodoroDuration });
   return res.data;
 }
 
@@ -89,8 +89,8 @@ export async function resetCompletedPomodoros() {
   return res.data;
 }
 
-// Add multiple completed pomodoros with timestamps
-export async function addCompletedPomodorosWithTimestamps(timestamps: string[]) {
-  const res = await api.post('/stats/complete/bulk', { timestamps });
+// Add multiple completed pomodoros with timestamps and durations
+export async function addCompletedPomodorosWithTimestamps(entries: { timestamp: string; pomodoroDuration: number }[]) {
+  const res = await api.post('/stats/complete/bulk', { entries });
   return res.data;
 } 
