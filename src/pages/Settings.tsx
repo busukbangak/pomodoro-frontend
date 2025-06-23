@@ -7,47 +7,83 @@ import { Switch } from '../components/ui/switch';
 import { getSettings, saveSettings, getToken } from '../lib/api';
 import type { UserSettings } from '../lib/api';
 
+const LOCAL_KEY = 'pomodoro-settings';
+const DEFAULTS: UserSettings = {
+  pomodoroDuration: 25,
+  shortBreakDuration: 5,
+  longBreakDuration: 15,
+  autoStartBreak: false,
+  autoStartPomodoro: false,
+};
+
+export function loadLocalSettings(): UserSettings {
+  const raw = localStorage.getItem(LOCAL_KEY);
+  if (!raw) return { ...DEFAULTS };
+  try {
+    return { ...DEFAULTS, ...JSON.parse(raw) };
+  } catch {
+    return { ...DEFAULTS };
+  }
+}
+
+function saveLocalSettings(settings: UserSettings) {
+  localStorage.setItem(LOCAL_KEY, JSON.stringify(settings));
+}
+
 const Settings: React.FC = () => {
-  const [pomodoroDuration, setPomodoroDuration] = useState(25);
-  const [shortBreakDuration, setShortBreakDuration] = useState(5);
-  const [longBreakDuration, setLongBreakDuration] = useState(15);
-  const [autoStartBreak, setAutoStartBreak] = useState(false);
-  const [autoStartPomodoro, setAutoStartPomodoro] = useState(false);
+  const [pomodoroDuration, setPomodoroDuration] = useState(DEFAULTS.pomodoroDuration);
+  const [shortBreakDuration, setShortBreakDuration] = useState(DEFAULTS.shortBreakDuration);
+  const [longBreakDuration, setLongBreakDuration] = useState(DEFAULTS.longBreakDuration);
+  const [autoStartBreak, setAutoStartBreak] = useState(DEFAULTS.autoStartBreak);
+  const [autoStartPomodoro, setAutoStartPomodoro] = useState(DEFAULTS.autoStartPomodoro);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isLoggedIn = Boolean(getToken());
 
+  // Load settings on mount or login state change
   useEffect(() => {
-    if (!isLoggedIn) return;
-    setLoading(true);
     setError(null);
-    getSettings()
-      .then((settings: UserSettings) => {
-        setPomodoroDuration(settings.pomodoroDuration);
-        setShortBreakDuration(settings.shortBreakDuration);
-        setLongBreakDuration(settings.longBreakDuration);
-        setAutoStartBreak(settings.autoStartBreak);
-        setAutoStartPomodoro(settings.autoStartPomodoro);
-      })
-      .catch(() => {
-        setError('Failed to load settings');
-      })
-      .finally(() => setLoading(false));
+    setLoading(true);
+    if (isLoggedIn) {
+      getSettings()
+        .then((settings: UserSettings) => {
+          setPomodoroDuration(settings.pomodoroDuration);
+          setShortBreakDuration(settings.shortBreakDuration);
+          setLongBreakDuration(settings.longBreakDuration);
+          setAutoStartBreak(settings.autoStartBreak);
+          setAutoStartPomodoro(settings.autoStartPomodoro);
+        })
+        .catch(() => setError('Failed to load settings'))
+        .finally(() => setLoading(false));
+    } else {
+      const settings = loadLocalSettings();
+      setPomodoroDuration(settings.pomodoroDuration);
+      setShortBreakDuration(settings.shortBreakDuration);
+      setLongBreakDuration(settings.longBreakDuration);
+      setAutoStartBreak(settings.autoStartBreak);
+      setAutoStartPomodoro(settings.autoStartPomodoro);
+      setLoading(false);
+    }
   }, [isLoggedIn]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    const settings: UserSettings = {
+      pomodoroDuration,
+      shortBreakDuration,
+      longBreakDuration,
+      autoStartBreak,
+      autoStartPomodoro,
+    };
     try {
-      await saveSettings({
-        pomodoroDuration,
-        shortBreakDuration,
-        longBreakDuration,
-        autoStartBreak,
-        autoStartPomodoro,
-      });
+      if (isLoggedIn) {
+        await saveSettings(settings);
+      } else {
+        saveLocalSettings(settings);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch {
@@ -56,19 +92,6 @@ const Settings: React.FC = () => {
       setLoading(false);
     }
   };
-
-  if (!isLoggedIn) {
-    return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader>
-          <CardTitle>Settings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center text-muted-foreground">Please log in to view and edit your settings.</div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card className="w-full max-w-md mx-auto">

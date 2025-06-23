@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
 import { completePomodoro, getToken, getSettings } from '../lib/api';
 import type { UserSettings } from '../lib/api';
+import { incrementLocalStats } from '../pages/Stats';
+import { loadLocalSettings } from '../pages/Settings';
 
 const DEFAULTS = {
   pomodoroDuration: 25,
@@ -34,21 +36,32 @@ export default function Timer() {
   const [message, setMessage] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
-  // Fetch user settings on mount
+  // Fetch user settings on mount and when login state changes
   useEffect(() => {
-    if (!getToken()) return;
-    getSettings()
-      .then((settings: UserSettings) => {
-        setDurations({
-          pomodoro: (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
-          short: (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
-          long: (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
-        });
-        setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
-        setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
-      })
-      .catch(() => {});
-  }, []);
+    if (getToken()) {
+      getSettings()
+        .then((settings: UserSettings) => {
+          setDurations({
+            pomodoro: (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
+            short: (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
+            long: (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
+          });
+          setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
+          setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
+        })
+        .catch(() => {});
+    } else {
+      const settings = loadLocalSettings();
+      setDurations({
+        pomodoro: (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
+        short: (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
+        long: (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
+      });
+      setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
+      setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
+    }
+    // eslint-disable-next-line
+  }, [getToken()]);
 
   // Update timer when mode or durations change
   useEffect(() => {
@@ -82,10 +95,15 @@ export default function Timer() {
           setIsRunning(false);
           clearInterval(intervalRef.current!);
           // Only trigger if prev === 1 (not 0)
-          if (mode === 'pomodoro' && getToken() && prev === 1) {
-            completePomodoro()
-              .then(() => setMessage('Pomodoro recorded!'))
-              .catch(() => setMessage('Failed to record Pomodoro.'));
+          if (mode === 'pomodoro' && prev === 1) {
+            if (getToken()) {
+              completePomodoro()
+                .then(() => setMessage('Pomodoro recorded!'))
+                .catch(() => setMessage('Failed to record Pomodoro.'));
+            } else {
+              incrementLocalStats();
+              setMessage('Pomodoro recorded!');
+            }
             // Auto-start break if enabled
             if (autoStartBreak) {
               setMode('short');

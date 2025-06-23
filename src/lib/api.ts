@@ -56,6 +56,12 @@ export async function completePomodoro() {
   return res.data;
 }
 
+// Get all completed pomodoros with timestamps
+export async function getAllCompletedPomodoros() {
+  const res = await api.get('/stats/completed/all');
+  return res.data.completed as { timestamp: string }[];
+}
+
 // UserSettings type
 export interface UserSettings {
   pomodoroDuration: number;
@@ -74,5 +80,17 @@ export async function getSettings() {
 // Save user settings
 export async function saveSettings(settings: Partial<UserSettings>) {
   const res = await api.post('/settings', settings);
+  return res.data;
+}
+
+// Reset all completed pomodoros
+export async function resetCompletedPomodoros() {
+  const res = await api.post('/stats/reset');
+  return res.data;
+}
+
+// Add multiple completed pomodoros with timestamps
+export async function addCompletedPomodorosWithTimestamps(timestamps: string[]) {
+  const res = await api.post('/stats/complete/bulk', { timestamps });
   return res.data;
 } 
