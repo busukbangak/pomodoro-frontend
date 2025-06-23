@@ -54,4 +54,25 @@ export async function getCompletedPomodoros() {
 export async function completePomodoro() {
   const res = await api.post('/stats/complete');
   return res.data;
+}
+
+// UserSettings type
+export interface UserSettings {
+  pomodoroDuration: number;
+  shortBreakDuration: number;
+  longBreakDuration: number;
+  autoStartBreak: boolean;
+  autoStartPomodoro: boolean;
+}
+
+// Get user settings
+export async function getSettings() {
+  const res = await api.get('/settings');
+  return res.data;
+}
+
+// Save user settings
+export async function saveSettings(settings: Partial<UserSettings>) {
+  const res = await api.post('/settings', settings);
+  return res.data;
 } 

@@ -1,34 +1,76 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
-import { completePomodoro, getToken } from '../lib/api';
+import { completePomodoro, getToken, getSettings } from '../lib/api';
+import type { UserSettings } from '../lib/api';
+
+const DEFAULTS = {
+  pomodoroDuration: 25,
+  shortBreakDuration: 5,
+  longBreakDuration: 15,
+  autoStartBreak: false,
+  autoStartPomodoro: false,
+};
 
 const MODES = [
-  { key: 'pomodoro', label: 'Pomodoro', duration: 3  },
-  { key: 'short', label: 'Short Break', duration: 5 * 60 },
-  { key: 'long', label: 'Long Break', duration: 15 * 60 },
+  { key: 'pomodoro', label: 'Pomodoro' },
+  { key: 'short', label: 'Short Break' },
+  { key: 'long', label: 'Long Break' },
 ];
 
 type ModeKey = 'pomodoro' | 'short' | 'long';
 
 export default function Timer() {
   const [mode, setMode] = useState<ModeKey>('pomodoro');
-  const [secondsLeft, setSecondsLeft] = useState(MODES[0].duration);
+  const [durations, setDurations] = useState({
+    pomodoro: DEFAULTS.pomodoroDuration * 60,
+    short: DEFAULTS.shortBreakDuration * 60,
+    long: DEFAULTS.longBreakDuration * 60,
+  });
+  const [autoStartBreak, setAutoStartBreak] = useState(DEFAULTS.autoStartBreak);
+  const [autoStartPomodoro, setAutoStartPomodoro] = useState(DEFAULTS.autoStartPomodoro);
+  const [secondsLeft, setSecondsLeft] = useState(durations.pomodoro);
   const [isRunning, setIsRunning] = useState(false);
+  const [pendingAutoStart, setPendingAutoStart] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
-  // Update timer when mode changes
+  // Fetch user settings on mount
   useEffect(() => {
-    const selected = MODES.find((m) => m.key === mode)!;
-    setSecondsLeft(selected.duration);
-    setIsRunning(false);
+    if (!getToken()) return;
+    getSettings()
+      .then((settings: UserSettings) => {
+        setDurations({
+          pomodoro: (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
+          short: (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
+          long: (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
+        });
+        setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
+        setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Update timer when mode or durations change
+  useEffect(() => {
+    setSecondsLeft(durations[mode]);
+    if (!pendingAutoStart) {
+      setIsRunning(false);
+    }
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
     setMessage(null);
-  }, [mode]);
+  }, [mode, durations]);
 
-  // Timer countdown logic
+  // Handle pending auto-start after mode change
+  useEffect(() => {
+    if (pendingAutoStart) {
+      setIsRunning(true);
+      setPendingAutoStart(false);
+    }
+  }, [mode, pendingAutoStart]);
+
+  // Timer countdown logic with auto-start
   useEffect(() => {
     if (!isRunning) {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -44,6 +86,14 @@ export default function Timer() {
             completePomodoro()
               .then(() => setMessage('Pomodoro recorded!'))
               .catch(() => setMessage('Failed to record Pomodoro.'));
+            // Auto-start break if enabled
+            if (autoStartBreak) {
+              setMode('short');
+              setPendingAutoStart(true);
+            }
+          } else if ((mode === 'short' || mode === 'long') && autoStartPomodoro) {
+            setMode('pomodoro');
+            setPendingAutoStart(true);
           }
           return 0;
         }
@@ -53,13 +103,12 @@ export default function Timer() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, mode]);
+  }, [isRunning, mode, autoStartBreak, autoStartPomodoro]);
 
   const handleStartStop = () => {
     if (!isRunning && secondsLeft === 0) {
       // If timer is at 0, reset to mode duration and start
-      const selected = MODES.find((m) => m.key === mode)!;
-      setSecondsLeft(selected.duration);
+      setSecondsLeft(durations[mode]);
       setIsRunning(true);
       setMessage(null);
       return;
@@ -69,8 +118,7 @@ export default function Timer() {
   };
 
   const handleReset = () => {
-    const selected = MODES.find((m) => m.key === mode)!;
-    setSecondsLeft(selected.duration);
+    setSecondsLeft(durations[mode]);
     setIsRunning(false);
     if (intervalRef.current) clearInterval(intervalRef.current);
     setMessage(null);
