@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
+import { completePomodoro, getToken } from '../lib/api';
 
 const MODES = [
   { key: 'pomodoro', label: 'Pomodoro', duration: 3  },
@@ -13,6 +14,7 @@ export default function Timer() {
   const [mode, setMode] = useState<ModeKey>('pomodoro');
   const [secondsLeft, setSecondsLeft] = useState(MODES[0].duration);
   const [isRunning, setIsRunning] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
   // Update timer when mode changes
@@ -23,6 +25,7 @@ export default function Timer() {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
+    setMessage(null);
   }, [mode]);
 
   // Timer countdown logic
@@ -36,6 +39,12 @@ export default function Timer() {
         if (prev <= 1) {
           setIsRunning(false);
           clearInterval(intervalRef.current!);
+          // Only trigger if prev === 1 (not 0)
+          if (mode === 'pomodoro' && getToken() && prev === 1) {
+            completePomodoro()
+              .then(() => setMessage('Pomodoro recorded!'))
+              .catch(() => setMessage('Failed to record Pomodoro.'));
+          }
           return 0;
         }
         return prev - 1;
@@ -44,7 +53,7 @@ export default function Timer() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning]);
+  }, [isRunning, mode]);
 
   const handleStartStop = () => {
     if (!isRunning && secondsLeft === 0) {
@@ -52,9 +61,11 @@ export default function Timer() {
       const selected = MODES.find((m) => m.key === mode)!;
       setSecondsLeft(selected.duration);
       setIsRunning(true);
+      setMessage(null);
       return;
     }
     setIsRunning((prev) => !prev);
+    setMessage(null);
   };
 
   const handleReset = () => {
@@ -62,6 +73,7 @@ export default function Timer() {
     setSecondsLeft(selected.duration);
     setIsRunning(false);
     if (intervalRef.current) clearInterval(intervalRef.current);
+    setMessage(null);
   };
 
   const formatTime = (secs: number) => {
@@ -95,6 +107,7 @@ export default function Timer() {
           Reset
         </Button>
       </div>
+      {message && <div className="text-sm text-center mt-2 text-muted-foreground">{message}</div>}
     </div>
   );
 } 
