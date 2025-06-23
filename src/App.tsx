@@ -2,8 +2,7 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import Home from './pages/Home';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
-import Login from './pages/Login';
-import Register from './pages/Register';
+import Authentication from './pages/Login';
 import { Card } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { ThemeProvider } from './components/theme-provider';
@@ -13,8 +12,7 @@ const navLinks = [
   { to: '/', label: 'Home' },
   { to: '/stats', label: 'Stats' },
   { to: '/settings', label: 'Settings' },
-  { to: '/login', label: 'Login' },
-  { to: '/register', label: 'Register' },
+  { to: '/auth', label: 'Login/Register' },
 ];
 
 function App() {
@@ -42,8 +40,7 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
+              <Route path="/auth" element={<Authentication />} />
             </Routes>
           </Card>
         </main>
