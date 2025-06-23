@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import Home from './pages/Home';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
@@ -7,6 +7,8 @@ import { Card } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { ThemeProvider } from './components/theme-provider';
 import { ModeToggle } from './components/mode-toggle';
+import { getToken, clearToken } from './lib/api';
+import React from 'react';
 
 const navLinks = [
   { to: '/', label: 'Home' },
@@ -17,6 +19,19 @@ const navLinks = [
 
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = React.useState(Boolean(getToken()));
+
+  React.useEffect(() => {
+    setIsLoggedIn(Boolean(getToken()));
+  }, [location]);
+
+  const handleSignOut = () => {
+    clearToken();
+    setIsLoggedIn(false);
+    navigate('/auth');
+  };
+
   return (
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <div className="min-h-svh flex flex-col bg-background">
@@ -32,6 +47,11 @@ function App() {
             </Button>
           ))}
           <div className="flex-1" />
+          {isLoggedIn && (
+            <Button variant="outline" onClick={handleSignOut} className="ml-2">
+              Sign Out
+            </Button>
+          )}
           <ModeToggle />
         </nav>
         <main className="flex-1 flex flex-col items-center justify-center p-4">
