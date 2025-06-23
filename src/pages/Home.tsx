@@ -1,12 +1,20 @@
 import React from 'react';
 import Timer from '../components/Timer';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 
-const Home: React.FC = () => {
+const Pomodoro: React.FC = () => {
   return (
-    <div className="flex flex-col items-center justify-center">
-      <Timer />
-    </div>
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <CardTitle>Pomodoro</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col items-center justify-center">
+          <Timer />
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
-export default Home; 
+export default Pomodoro; 

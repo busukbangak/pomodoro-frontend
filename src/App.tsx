@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import Home from './pages/Home';
+import Pomodoro from './pages/Home';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
 import Authentication from './pages/Authentication';
@@ -12,7 +12,7 @@ import { Dialog, DialogContent } from './components/ui/dialog';
 import { LogIn, LogOut } from 'lucide-react';
 
 const navLinks = [
-  { to: '/', label: 'Home' },
+  { to: '/', label: 'Pomodoro' },
   { to: '/stats', label: 'Stats' },
   { to: '/settings', label: 'Settings' },
 ];
@@ -68,7 +68,7 @@ function App() {
         </nav>
         <main className="flex-1 flex flex-col items-center justify-center p-4">
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<Pomodoro />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
