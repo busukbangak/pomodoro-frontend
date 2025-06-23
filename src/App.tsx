@@ -37,7 +37,7 @@ function App() {
           <ModeToggle />
         </nav>
         <main className="flex-1 flex flex-col items-center justify-center p-4">
-          <Card className="w-full max-w-xl p-6 shadow-lg">
+          <Card className="max-w-xl p-8 shadow-lg">
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/stats" element={<Stats />} />
