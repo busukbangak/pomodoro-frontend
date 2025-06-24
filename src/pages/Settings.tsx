@@ -245,6 +245,17 @@ const Settings: React.FC = () => {
     setPendingBackup(null);
   };
 
+  const handleResetToDefaults = () => {
+    setPomodoroDuration(DEFAULTS.pomodoroDuration);
+    setShortBreakDuration(DEFAULTS.shortBreakDuration);
+    setLongBreakDuration(DEFAULTS.longBreakDuration);
+    setAutoStartBreak(DEFAULTS.autoStartBreak);
+    setAutoStartPomodoro(DEFAULTS.autoStartPomodoro);
+    
+    // Clear any existing error messages
+    setError(null);
+  };
+
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
@@ -302,6 +313,15 @@ const Settings: React.FC = () => {
             </div>
             <Button type="submit" className="w-full mt-2" disabled={loading}>
               {loading ? 'Saving...' : 'Save Settings'}
+            </Button>
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="w-full" 
+              onClick={handleResetToDefaults}
+              disabled={loading}
+            >
+              Reset to Defaults
             </Button>
             {saved && <div className="text-green-600 text-center text-sm">Settings saved!</div>}
             {error && <div className="text-destructive text-center text-sm">{error}</div>}
