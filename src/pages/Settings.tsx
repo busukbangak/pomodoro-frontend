@@ -67,16 +67,17 @@ const Settings: React.FC = () => {
           saveLocalSettings(settings);
         })
         .catch(() => {
+          // Always fall back to local settings on any error, not just offline
+          const localSettings = loadLocalSettings();
+          setPomodoroDuration(localSettings.pomodoroDuration);
+          setShortBreakDuration(localSettings.shortBreakDuration);
+          setLongBreakDuration(localSettings.longBreakDuration);
+          setAutoStartBreak(localSettings.autoStartBreak);
+          setAutoStartPomodoro(localSettings.autoStartPomodoro);
+          
+          // Only show error if we're offline and couldn't sync
           if (!navigator.onLine) {
-            setError('No network: offline, cannot sync now.');
-            const localSettings = loadLocalSettings();
-            setPomodoroDuration(localSettings.pomodoroDuration);
-            setShortBreakDuration(localSettings.shortBreakDuration);
-            setLongBreakDuration(localSettings.longBreakDuration);
-            setAutoStartBreak(localSettings.autoStartBreak);
-            setAutoStartPomodoro(localSettings.autoStartPomodoro);
-          } else {
-            setError('Failed to load settings');
+            setError('Offline mode: using local settings');
           }
         })
         .finally(() => setLoading(false));
@@ -92,15 +93,25 @@ const Settings: React.FC = () => {
   }, [isLoggedIn, refreshKey, isMergePendingStorage()]);
 
   useEffect(() => {
-    const handleOffline = () => setError('No network: offline, cannot sync now.');
-    const handleOnline = () => setError(null);
+    const handleOffline = () => {
+      // Don't show error immediately when going offline, just update the message
+      if (error && error.includes('Failed to load settings')) {
+        setError('Offline mode: using local settings');
+      }
+    };
+    const handleOnline = () => {
+      // Clear offline messages when coming back online
+      if (error && error.includes('Offline mode')) {
+        setError(null);
+      }
+    };
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
     return () => {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
     };
-  }, []);
+  }, [error]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
 import { getToken, getSettings } from '../lib/api';
 import type { UserSettings } from '../lib/api';
@@ -58,22 +58,21 @@ export default function Timer() {
           setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
         })
         .catch(() => {
-          if (!navigator.onLine) {
-            const settings = loadLocalSettings();
-            setDurations({
-              pomodoro: settings.pomodoroDuration < 1
-                ? Math.round(settings.pomodoroDuration * 60)
-                : (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
-              short: settings.shortBreakDuration < 1
-                ? Math.round(settings.shortBreakDuration * 60)
-                : (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
-              long: settings.longBreakDuration < 1
-                ? Math.round(settings.longBreakDuration * 60)
-                : (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
-            });
-            setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
-            setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
-          }
+          // Always fall back to local settings on any error, not just offline
+          const settings = loadLocalSettings();
+          setDurations({
+            pomodoro: settings.pomodoroDuration < 1
+              ? Math.round(settings.pomodoroDuration * 60)
+              : (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
+            short: settings.shortBreakDuration < 1
+              ? Math.round(settings.shortBreakDuration * 60)
+              : (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
+            long: settings.longBreakDuration < 1
+              ? Math.round(settings.longBreakDuration * 60)
+              : (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
+          });
+          setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
+          setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
         });
     } else {
       const settings = loadLocalSettings();

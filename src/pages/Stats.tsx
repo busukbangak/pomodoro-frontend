@@ -79,24 +79,25 @@ const Stats: React.FC = () => {
           }
         })
         .catch((err) => {
+          function isLocalPomodoroEntry(e: unknown): e is LocalPomodoroEntry {
+            return (
+              typeof e === 'object' &&
+              e !== null &&
+              'timestamp' in e &&
+              typeof (e as { timestamp: string }).timestamp === 'string' &&
+              'pomodoroDuration' in e &&
+              typeof (e as { pomodoroDuration: number }).pomodoroDuration === 'number'
+            );
+          }
+          const localEntriesRaw = loadLocalStats();
+          const localEntries: LocalPomodoroEntry[] = Array.isArray(localEntriesRaw)
+            ? localEntriesRaw.filter(isLocalPomodoroEntry)
+            : [];
+          setCount(localEntries.length);
+          setTotalDuration(localEntries.reduce((total, entry) => total + entry.pomodoroDuration, 0));
+          
           if (!navigator.onLine) {
-            setError('No network: offline, cannot sync now.');
-            function isLocalPomodoroEntry(e: unknown): e is LocalPomodoroEntry {
-              return (
-                typeof e === 'object' &&
-                e !== null &&
-                'timestamp' in e &&
-                typeof (e as { timestamp: string }).timestamp === 'string' &&
-                'pomodoroDuration' in e &&
-                typeof (e as { pomodoroDuration: number }).pomodoroDuration === 'number'
-              );
-            }
-            const localEntriesRaw = loadLocalStats();
-            const localEntries: LocalPomodoroEntry[] = Array.isArray(localEntriesRaw)
-              ? localEntriesRaw.filter(isLocalPomodoroEntry)
-              : [];
-            setCount(localEntries.length);
-            setTotalDuration(localEntries.reduce((total, entry) => total + entry.pomodoroDuration, 0));
+            setError('Offline mode: showing local stats');
           } else if (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
             setError((err as { message: string }).message);
           } else {
@@ -113,15 +114,23 @@ const Stats: React.FC = () => {
   }, [isLoggedIn, refreshKey, isMergePendingStorage()]);
 
   useEffect(() => {
-    const handleOffline = () => setError('No network: offline, cannot sync now.');
-    const handleOnline = () => setError(null);
+    const handleOffline = () => {
+      if (error && error.includes('Failed to load stats')) {
+        setError('Offline mode: showing local stats');
+      }
+    };
+    const handleOnline = () => {
+      if (error && error.includes('Offline mode')) {
+        setError(null);
+      }
+    };
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
     return () => {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
     };
-  }, []);
+  }, [error]);
 
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
