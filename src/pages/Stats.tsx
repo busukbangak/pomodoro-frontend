@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { getCompletedPomodoros, getAllCompletedPomodoros, getToken } from '../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { useRefresh } from '../contexts/RefreshContext';
 
 const LOCAL_STATS_KEY = 'pomodoro-stats';
 
-type LocalPomodoroEntry = { 
+type LocalPomodoroEntry = {
   timestamp: string;
   pomodoroDuration: number;
 };
@@ -37,7 +38,7 @@ export function getLocalStatsTotalDuration(): number {
 
 export function incrementLocalStats(pomodoroDuration: number) {
   const current = loadLocalStats();
-  current.push({ 
+  current.push({
     timestamp: new Date().toISOString(),
     pomodoroDuration
   });
@@ -45,11 +46,12 @@ export function incrementLocalStats(pomodoroDuration: number) {
 }
 
 const Stats: React.FC = () => {
-  const [count, setCount] = useState<number | null>(null);
-  const [totalDuration, setTotalDuration] = useState<number | null>(null);
+  const [count, setCount] = useState<number>(0);
+  const [totalDuration, setTotalDuration] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isLoggedIn = Boolean(getToken());
+  const { refreshKey } = useRefresh();
 
   useEffect(() => {
     setError(null);
@@ -61,11 +63,39 @@ const Stats: React.FC = () => {
       ])
         .then(([countData, allData]) => {
           setCount(countData.count);
-          const total = allData.reduce((sum: number, entry: { timestamp: string; pomodoroDuration: number }) => sum + entry.pomodoroDuration, 0);
+          const validEntries = Array.isArray(allData)
+            ? allData.filter((e: unknown): e is { timestamp: string; pomodoroDuration: number } =>
+                typeof e === 'object' &&
+                e !== null &&
+                'timestamp' in e &&
+                typeof (e as { timestamp: string }).timestamp === 'string' &&
+                'pomodoroDuration' in e &&
+                typeof (e as { pomodoroDuration: number }).pomodoroDuration === 'number')
+            : [];
+          const total = validEntries.reduce((sum, entry) => sum + entry.pomodoroDuration, 0);
           setTotalDuration(total);
+          localStorage.setItem('pomodoro-stats', JSON.stringify(validEntries));
         })
         .catch((err) => {
-          if (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+          if (!navigator.onLine) {
+            setError('No network: offline, cannot sync now.');
+            function isLocalPomodoroEntry(e: unknown): e is LocalPomodoroEntry {
+              return (
+                typeof e === 'object' &&
+                e !== null &&
+                'timestamp' in e &&
+                typeof (e as { timestamp: string }).timestamp === 'string' &&
+                'pomodoroDuration' in e &&
+                typeof (e as { pomodoroDuration: number }).pomodoroDuration === 'number'
+              );
+            }
+            const localEntriesRaw = loadLocalStats();
+            const localEntries: LocalPomodoroEntry[] = Array.isArray(localEntriesRaw)
+              ? localEntriesRaw.filter(isLocalPomodoroEntry)
+              : [];
+            setCount(localEntries.length);
+            setTotalDuration(localEntries.reduce((total, entry) => total + entry.pomodoroDuration, 0));
+          } else if (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
             setError((err as { message: string }).message);
           } else {
             setError('Failed to load stats');
@@ -78,7 +108,18 @@ const Stats: React.FC = () => {
       setTotalDuration(localEntries.reduce((total, entry) => total + entry.pomodoroDuration, 0));
       setLoading(false);
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, refreshKey]);
+
+  useEffect(() => {
+    const handleOffline = () => setError('No network: offline, cannot sync now.');
+    const handleOnline = () => setError(null);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
 
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -96,8 +137,7 @@ const Stats: React.FC = () => {
       </CardHeader>
       <CardContent>
         {loading && <div className="text-center">Loading...</div>}
-        {error && <div className="text-destructive text-center">{error}</div>}
-        {count !== null && totalDuration !== null && !loading && !error && (
+        {count !== null && totalDuration !== null && !loading && (
           <div className="flex flex-col items-center gap-4">
             <div className="flex flex-col items-center gap-2">
               <div className="text-4xl font-bold">{count}</div>
@@ -109,6 +149,7 @@ const Stats: React.FC = () => {
             </div>
           </div>
         )}
+        {error && <div className="text-destructive text-center mt-6">{error}</div>}
       </CardContent>
     </Card>
   );

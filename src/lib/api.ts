@@ -69,6 +69,7 @@ export interface UserSettings {
   longBreakDuration: number;
   autoStartBreak: boolean;
   autoStartPomodoro: boolean;
+  lastUpdated?: string;
 }
 
 // Get user settings
@@ -93,4 +94,16 @@ export async function resetCompletedPomodoros() {
 export async function addCompletedPomodorosWithTimestamps(entries: { timestamp: string; pomodoroDuration: number }[]) {
   const res = await api.post('/stats/complete/bulk', { entries });
   return res.data;
+}
+
+// Get all user data (settings + stats)
+export async function getUserSyncData() {
+  const res = await api.get('/stats/sync');
+  return res.data; // { settings, stats }
+}
+
+// Merge local data into user account
+export async function mergeUserSyncData(data: { settings?: Partial<UserSettings & { lastUpdated?: string }>; stats?: { completed: { timestamp: string; pomodoroDuration: number }[] } }) {
+  const res = await api.post('/stats/sync', data);
+  return res.data; // { settings, stats }
 } 

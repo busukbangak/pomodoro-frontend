@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
-import { completePomodoro, getToken, getSettings } from '../lib/api';
+import { getToken, getSettings } from '../lib/api';
 import type { UserSettings } from '../lib/api';
-import { incrementLocalStats } from '../pages/Stats';
+import { incrementLocalStats, getLocalStatsEntries } from '../pages/Stats';
 import { loadLocalSettings } from '../pages/Settings';
+import { mergeUserSyncData, getUserSyncData } from '../lib/api';
 
 const DEFAULTS = {
   pomodoroDuration: 25,
@@ -42,20 +43,49 @@ export default function Timer() {
       getSettings()
         .then((settings: UserSettings) => {
           setDurations({
-            pomodoro: (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
-            short: (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
-            long: (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
+            pomodoro: settings.pomodoroDuration < 1
+              ? Math.round(settings.pomodoroDuration * 60)
+              : (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
+            short: settings.shortBreakDuration < 1
+              ? Math.round(settings.shortBreakDuration * 60)
+              : (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
+            long: settings.longBreakDuration < 1
+              ? Math.round(settings.longBreakDuration * 60)
+              : (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
           });
           setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
           setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!navigator.onLine) {
+            const settings = loadLocalSettings();
+            setDurations({
+              pomodoro: settings.pomodoroDuration < 1
+                ? Math.round(settings.pomodoroDuration * 60)
+                : (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
+              short: settings.shortBreakDuration < 1
+                ? Math.round(settings.shortBreakDuration * 60)
+                : (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
+              long: settings.longBreakDuration < 1
+                ? Math.round(settings.longBreakDuration * 60)
+                : (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
+            });
+            setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
+            setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
+          }
+        });
     } else {
       const settings = loadLocalSettings();
       setDurations({
-        pomodoro: (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
-        short: (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
-        long: (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
+        pomodoro: settings.pomodoroDuration < 1
+          ? Math.round(settings.pomodoroDuration * 60)
+          : (settings.pomodoroDuration || DEFAULTS.pomodoroDuration) * 60,
+        short: settings.shortBreakDuration < 1
+          ? Math.round(settings.shortBreakDuration * 60)
+          : (settings.shortBreakDuration || DEFAULTS.shortBreakDuration) * 60,
+        long: settings.longBreakDuration < 1
+          ? Math.round(settings.longBreakDuration * 60)
+          : (settings.longBreakDuration || DEFAULTS.longBreakDuration) * 60,
       });
       setAutoStartBreak(settings.autoStartBreak ?? DEFAULTS.autoStartBreak);
       setAutoStartPomodoro(settings.autoStartPomodoro ?? DEFAULTS.autoStartPomodoro);
@@ -96,13 +126,22 @@ export default function Timer() {
           clearInterval(intervalRef.current!);
           // Only trigger if prev === 1 (not 0)
           if (mode === 'pomodoro' && prev === 1) {
-            if (getToken()) {
-              completePomodoro(durations.pomodoro / 60)
-                .then(() => setMessage('Pomodoro recorded!'))
-                .catch(() => setMessage('Failed to record Pomodoro.'));
-            } else {
-              incrementLocalStats(durations.pomodoro / 60);
-              setMessage('Pomodoro recorded!');
+            incrementLocalStats(durations.pomodoro / 60);
+            setMessage('Pomodoro recorded!');
+            if (getToken() && navigator.onLine) {
+              // Sync only unsynced local stats (without _id) to backend
+              const localStats = getLocalStatsEntries();
+              function hasId(entry: object): entry is { _id: string } {
+                return typeof (entry as { _id?: unknown })._id === 'string';
+              }
+              const unsynced = localStats.filter(entry => !hasId(entry));
+              if (unsynced.length > 0) {
+                mergeUserSyncData({ stats: { completed: unsynced } }).then(() => {
+                  getUserSyncData().then(({ stats }) => {
+                    localStorage.setItem('pomodoro-stats', JSON.stringify(stats.completed));
+                  });
+                });
+              }
             }
             // Auto-start break if enabled
             if (autoStartBreak) {

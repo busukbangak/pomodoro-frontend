@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Switch } from '../components/ui/switch';
 import { getSettings, saveSettings, getToken } from '../lib/api';
 import type { UserSettings } from '../lib/api';
+import { useRefresh } from '../contexts/RefreshContext';
 
 const LOCAL_KEY = 'pomodoro-settings';
 const DEFAULTS: UserSettings = {
@@ -40,6 +41,7 @@ const Settings: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isLoggedIn = Boolean(getToken());
+  const { refreshKey } = useRefresh();
 
   // Load settings on mount or login state change
   useEffect(() => {
@@ -53,8 +55,21 @@ const Settings: React.FC = () => {
           setLongBreakDuration(settings.longBreakDuration);
           setAutoStartBreak(settings.autoStartBreak);
           setAutoStartPomodoro(settings.autoStartPomodoro);
+          saveLocalSettings(settings);
         })
-        .catch(() => setError('Failed to load settings'))
+        .catch(() => {
+          if (!navigator.onLine) {
+            setError('No network: offline, cannot sync now.');
+            const localSettings = loadLocalSettings();
+            setPomodoroDuration(localSettings.pomodoroDuration);
+            setShortBreakDuration(localSettings.shortBreakDuration);
+            setLongBreakDuration(localSettings.longBreakDuration);
+            setAutoStartBreak(localSettings.autoStartBreak);
+            setAutoStartPomodoro(localSettings.autoStartPomodoro);
+          } else {
+            setError('Failed to load settings');
+          }
+        })
         .finally(() => setLoading(false));
     } else {
       const settings = loadLocalSettings();
@@ -65,7 +80,18 @@ const Settings: React.FC = () => {
       setAutoStartPomodoro(settings.autoStartPomodoro);
       setLoading(false);
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, refreshKey]);
+
+  useEffect(() => {
+    const handleOffline = () => setError('No network: offline, cannot sync now.');
+    const handleOnline = () => setError(null);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,12 +103,12 @@ const Settings: React.FC = () => {
       longBreakDuration,
       autoStartBreak,
       autoStartPomodoro,
+      lastUpdated: new Date().toISOString(),
     };
     try {
-      if (isLoggedIn) {
+      saveLocalSettings(settings);
+      if (isLoggedIn && navigator.onLine) {
         await saveSettings(settings);
-      } else {
-        saveLocalSettings(settings);
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
@@ -105,7 +131,6 @@ const Settings: React.FC = () => {
             <Input
               id="pomodoro"
               type="number"
-              min={1}
               value={pomodoroDuration}
               onChange={e => setPomodoroDuration(Number(e.target.value))}
               disabled={loading}
@@ -116,7 +141,6 @@ const Settings: React.FC = () => {
             <Input
               id="shortBreak"
               type="number"
-              min={1}
               value={shortBreakDuration}
               onChange={e => setShortBreakDuration(Number(e.target.value))}
               disabled={loading}
@@ -127,7 +151,6 @@ const Settings: React.FC = () => {
             <Input
               id="longBreak"
               type="number"
-              min={1}
               value={longBreakDuration}
               onChange={e => setLongBreakDuration(Number(e.target.value))}
               disabled={loading}

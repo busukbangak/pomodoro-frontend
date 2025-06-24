@@ -6,12 +6,14 @@ import Authentication from './pages/Authentication';
 import { Button } from './components/ui/button';
 import { ThemeProvider } from './components/theme-provider';
 import { ModeToggle } from './components/mode-toggle';
-import { getToken, clearToken, getSettings, saveSettings, getAllCompletedPomodoros, addCompletedPomodorosWithTimestamps, resetCompletedPomodoros } from './lib/api';
-import React from 'react';
+import { getToken, clearToken, getSettings, getAllCompletedPomodoros, getUserSyncData, mergeUserSyncData } from './lib/api';
+import React, { useEffect } from 'react';
 import { Dialog, DialogContent } from './components/ui/dialog';
 import { LogIn, LogOut } from 'lucide-react';
 import type { UserSettings } from './lib/api';
 import { getLocalStatsEntries } from './pages/Stats';
+import { loadLocalSettings } from './pages/Settings';
+import { useRefresh } from './contexts/RefreshContext';
 
 const navLinks = [
   { to: '/', label: 'Pomodoro' },
@@ -30,15 +32,57 @@ function App() {
   const LOCAL_STATS_KEY = 'pomodoro-stats';
   const [mergeStatsPromptOpen, setMergeStatsPromptOpen] = React.useState(false);
   const [mergeStatsDiff, setMergeStatsDiff] = React.useState<{local: number, backend: number, uniqueToLocal: number} | null>(null);
+  const { triggerRefresh } = useRefresh();
 
   React.useEffect(() => {
     setIsLoggedIn(Boolean(getToken()));
   }, [location]);
 
+  useEffect(() => {
+    const handleOnline = async () => {
+      triggerRefresh();
+      if (isLoggedIn) {
+        const localStats = getLocalStatsEntries();
+        function hasId(entry: object): entry is { _id: string } {
+          return typeof (entry as { _id?: unknown })._id === 'string';
+        }
+        const unsynced = localStats.filter(entry => !hasId(entry));
+        if (unsynced.length > 0) {
+          await mergeUserSyncData({ stats: { completed: unsynced } });
+          const { stats } = await getUserSyncData();
+          localStorage.setItem('pomodoro-stats', JSON.stringify(stats.completed));
+          triggerRefresh();
+        }
+        // Settings sync
+        const localSettings = loadLocalSettings();
+        const { settings: backendSettings } = await getUserSyncData();
+        // Compare settings (type-safe)
+        const isDifferent =
+          localSettings.pomodoroDuration !== backendSettings.pomodoroDuration ||
+          localSettings.shortBreakDuration !== backendSettings.shortBreakDuration ||
+          localSettings.longBreakDuration !== backendSettings.longBreakDuration ||
+          localSettings.autoStartBreak !== backendSettings.autoStartBreak ||
+          localSettings.autoStartPomodoro !== backendSettings.autoStartPomodoro;
+        if (isDifferent) {
+          await mergeUserSyncData({ settings: localSettings });
+          const { settings } = await getUserSyncData();
+          localStorage.setItem('pomodoro-settings', JSON.stringify(settings));
+          triggerRefresh();
+        }
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [isLoggedIn]);
+
   const handleSignOut = () => {
     clearToken();
     setIsLoggedIn(false);
     setAuthOpen(false);
+    localStorage.removeItem(LOCAL_KEY);
+    localStorage.removeItem(LOCAL_STATS_KEY);
     navigate('/');
   };
 
@@ -66,8 +110,14 @@ function App() {
         if (settingsDiffer(local, backend)) {
           setMergeDiff({ local, backend });
           setMergePromptOpen(true);
+        } else {
+          await syncDown();
         }
-      } catch {}
+      } catch {
+        await syncDown();
+      }
+    } else {
+      await syncDown();
     }
     // Stats merge prompt (timestamp-based)
     try {
@@ -83,24 +133,37 @@ function App() {
             uniqueToLocal: uniqueLocal.length,
           });
           setMergeStatsPromptOpen(true);
+        } else {
+          await syncDown();
         }
+      } else {
+        await syncDown();
       }
-    } catch {}
-  };
-
-  // Merge action: overwrite backend with local
-  const handleMergeSettings = async () => {
-    if (mergeDiff) {
-      await saveSettings(mergeDiff.local);
-      setMergePromptOpen(false);
-      setMergeDiff(null);
+    } catch {
+      await syncDown();
     }
   };
 
-  // Skip action: just close prompt
-  const handleSkipMerge = () => {
+  // Merge action: overwrite backend with local (for settings)
+  const handleMergeSettings = async () => {
+    if (mergeDiff) {
+      // Add lastUpdated timestamp
+      const localWithTimestamp = {
+        ...mergeDiff.local,
+        lastUpdated: new Date().toISOString(),
+      };
+      await mergeUserSyncData({ settings: localWithTimestamp });
+      setMergePromptOpen(false);
+      setMergeDiff(null);
+      await syncDown();
+    }
+  };
+
+  // Skip action: just close prompt and sync down
+  const handleSkipMerge = async () => {
     setMergePromptOpen(false);
     setMergeDiff(null);
+    await syncDown();
   };
 
   // Optionally: show differences (for now, just a simple list)
@@ -127,40 +190,27 @@ function App() {
     );
   };
 
-  // Merge action: add only unique local entries to backend
+  // Merge action: add only unique local entries to backend (for stats)
   const handleMergeStats = async () => {
     try {
       const localEntries = getLocalStatsEntries();
-      const backendEntries = await getAllCompletedPomodoros();
-      const backendTimestamps = new Set(backendEntries.map(e => new Date(e.timestamp).toISOString()));
-      const uniqueLocal = localEntries.filter(e => !backendTimestamps.has(new Date(e.timestamp).toISOString()));
-      if (uniqueLocal.length > 0) {
-        await addCompletedPomodorosWithTimestamps(uniqueLocal);
-      }
-      localStorage.removeItem(LOCAL_STATS_KEY);
-    } catch {}
-    setMergeStatsPromptOpen(false);
-    setMergeStatsDiff(null);
-  };
-
-  // Replace action: reset backend and add all local entries
-  const handleReplaceStats = async () => {
-    try {
-      const localEntries = getLocalStatsEntries();
-      await resetCompletedPomodoros();
       if (localEntries.length > 0) {
-        await addCompletedPomodorosWithTimestamps(localEntries);
+        await mergeUserSyncData({ stats: { completed: localEntries } });
       }
       localStorage.removeItem(LOCAL_STATS_KEY);
-    } catch {}
+      await syncDown();
+    } catch {
+      // Optionally handle error (e.g., show toast)
+    }
     setMergeStatsPromptOpen(false);
     setMergeStatsDiff(null);
   };
 
-  // Skip action: just close prompt
-  const handleSkipMergeStats = () => {
+  // Skip action: just close prompt and sync down
+  const handleSkipMergeStats = async () => {
     setMergeStatsPromptOpen(false);
     setMergeStatsDiff(null);
+    await syncDown();
   };
 
   const renderStatsDiff = () => {
@@ -173,6 +223,13 @@ function App() {
         <li><b>To Merge:</b> {uniqueToLocal} new from local</li>
       </ul>
     );
+  };
+
+  // Helper to sync down latest data from server
+  const syncDown = async () => {
+    const { settings, stats } = await getUserSyncData();
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(settings));
+    localStorage.setItem(LOCAL_STATS_KEY, JSON.stringify(stats.completed));
   };
 
   return (
@@ -236,7 +293,6 @@ function App() {
             {renderStatsDiff()}
             <div className="flex gap-2 mt-4">
               <Button onClick={handleMergeStats} variant="default">Merge (Add Local)</Button>
-              <Button onClick={handleReplaceStats} variant="destructive">Replace (Use Local)</Button>
               <Button onClick={handleSkipMergeStats} variant="outline">Skip</Button>
             </div>
           </DialogContent>
