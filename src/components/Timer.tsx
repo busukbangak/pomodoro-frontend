@@ -5,6 +5,7 @@ import type { UserSettings } from '../lib/api';
 import { incrementLocalStats, getLocalStatsEntries } from '../pages/Stats';
 import { loadLocalSettings } from '../pages/Settings';
 import { mergeUserSyncData, getUserSyncData } from '../lib/api';
+import { isMergePendingStorage } from '../contexts/RefreshContext';
 
 const DEFAULTS = {
   pomodoroDuration: 25,
@@ -138,7 +139,9 @@ export default function Timer() {
               if (unsynced.length > 0) {
                 mergeUserSyncData({ stats: { completed: unsynced } }).then(() => {
                   getUserSyncData().then(({ stats }) => {
-                    localStorage.setItem('pomodoro-stats', JSON.stringify(stats.completed));
+                    if (!isMergePendingStorage()) {
+                      localStorage.setItem('pomodoro-stats', JSON.stringify(stats.completed));
+                    }
                   });
                 });
               }

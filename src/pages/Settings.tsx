@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Switch } from '../components/ui/switch';
 import { getSettings, saveSettings, getToken } from '../lib/api';
 import type { UserSettings } from '../lib/api';
-import { useRefresh } from '../contexts/RefreshContext';
+import { useRefresh, isMergePendingStorage } from '../contexts/RefreshContext';
 
 const LOCAL_KEY = 'pomodoro-settings';
 const DEFAULTS: UserSettings = {
@@ -28,6 +28,7 @@ export function loadLocalSettings(): UserSettings {
 }
 
 function saveLocalSettings(settings: UserSettings) {
+  if (isMergePendingStorage()) return;
   localStorage.setItem(LOCAL_KEY, JSON.stringify(settings));
 }
 
@@ -80,7 +81,7 @@ const Settings: React.FC = () => {
       setAutoStartPomodoro(settings.autoStartPomodoro);
       setLoading(false);
     }
-  }, [isLoggedIn, refreshKey]);
+  }, [isLoggedIn, refreshKey, isMergePendingStorage()]);
 
   useEffect(() => {
     const handleOffline = () => setError('No network: offline, cannot sync now.');

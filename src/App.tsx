@@ -13,7 +13,7 @@ import { LogIn, LogOut } from 'lucide-react';
 import type { UserSettings } from './lib/api';
 import { getLocalStatsEntries } from './pages/Stats';
 import { loadLocalSettings } from './pages/Settings';
-import { useRefresh } from './contexts/RefreshContext';
+import { useRefresh, isMergePendingStorage } from './contexts/RefreshContext';
 
 const navLinks = [
   { to: '/', label: 'Pomodoro' },
@@ -41,7 +41,7 @@ function App() {
   useEffect(() => {
     const handleOnline = async () => {
       triggerRefresh();
-      if (isLoggedIn) {
+      if (isLoggedIn && !isMergePendingStorage()) {
         const localStats = getLocalStatsEntries();
         function hasId(entry: object): entry is { _id: string } {
           return typeof (entry as { _id?: unknown })._id === 'string';
@@ -50,7 +50,9 @@ function App() {
         if (unsynced.length > 0) {
           await mergeUserSyncData({ stats: { completed: unsynced } });
           const { stats } = await getUserSyncData();
-          localStorage.setItem('pomodoro-stats', JSON.stringify(stats.completed));
+          if (!isMergePendingStorage()) {
+            localStorage.setItem('pomodoro-stats', JSON.stringify(stats.completed));
+          }
           triggerRefresh();
         }
         // Settings sync
@@ -66,7 +68,9 @@ function App() {
         if (isDifferent) {
           await mergeUserSyncData({ settings: localSettings });
           const { settings } = await getUserSyncData();
-          localStorage.setItem('pomodoro-settings', JSON.stringify(settings));
+          if (!isMergePendingStorage()) {
+            localStorage.setItem('pomodoro-settings', JSON.stringify(settings));
+          }
           triggerRefresh();
         }
       }
@@ -75,7 +79,7 @@ function App() {
     return () => {
       window.removeEventListener('online', handleOnline);
     };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, isMergePendingStorage()]);
 
   const handleSignOut = () => {
     clearToken();
@@ -99,8 +103,12 @@ function App() {
 
   // Called after login/register
   const handleAuthSuccess = async () => {
+    // Set merge pending flag immediately to prevent race conditions
+    localStorage.setItem('mergePending', '1');
     setIsLoggedIn(true);
     setAuthOpen(false);
+    let needsSettingsMerge = false;
+    let needsStatsMerge = false;
     // Check for local settings
     const raw = localStorage.getItem(LOCAL_KEY);
     if (raw) {
@@ -110,14 +118,9 @@ function App() {
         if (settingsDiffer(local, backend)) {
           setMergeDiff({ local, backend });
           setMergePromptOpen(true);
-        } else {
-          await syncDown();
+          needsSettingsMerge = true;
         }
-      } catch {
-        await syncDown();
-      }
-    } else {
-      await syncDown();
+      } catch { /* ignore, handled by merge prompt logic */ }
     }
     // Stats merge prompt (timestamp-based)
     try {
@@ -133,13 +136,13 @@ function App() {
             uniqueToLocal: uniqueLocal.length,
           });
           setMergeStatsPromptOpen(true);
-        } else {
-          await syncDown();
+          needsStatsMerge = true;
         }
-      } else {
-        await syncDown();
       }
-    } catch {
+    } catch { /* ignore, handled by merge prompt logic */ }
+    // If neither prompt is needed, clear the flag and sync down
+    if (!needsSettingsMerge && !needsStatsMerge) {
+      localStorage.removeItem('mergePending');
       await syncDown();
     }
   };
@@ -147,7 +150,6 @@ function App() {
   // Merge action: overwrite backend with local (for settings)
   const handleMergeSettings = async () => {
     if (mergeDiff) {
-      // Add lastUpdated timestamp
       const localWithTimestamp = {
         ...mergeDiff.local,
         lastUpdated: new Date().toISOString(),
@@ -155,15 +157,24 @@ function App() {
       await mergeUserSyncData({ settings: localWithTimestamp });
       setMergePromptOpen(false);
       setMergeDiff(null);
-      await syncDown();
+      // If no other merge prompt is open, clear flag then sync down
+      if (!mergeStatsPromptOpen) {
+        localStorage.removeItem('mergePending');
+        await syncDown();
+        triggerRefresh();
+      }
     }
   };
 
-  // Skip action: just close prompt and sync down
+  // Skip action: just close prompt and sync down if needed
   const handleSkipMerge = async () => {
     setMergePromptOpen(false);
     setMergeDiff(null);
-    await syncDown();
+    if (!mergeStatsPromptOpen) {
+      localStorage.removeItem('mergePending');
+      await syncDown();
+      triggerRefresh();
+    }
   };
 
   // Optionally: show differences (for now, just a simple list)
@@ -194,23 +205,33 @@ function App() {
   const handleMergeStats = async () => {
     try {
       const localEntries = getLocalStatsEntries();
-      if (localEntries.length > 0) {
-        await mergeUserSyncData({ stats: { completed: localEntries } });
+      function hasId(entry: object): entry is { _id: string } {
+        return typeof (entry as { _id?: unknown })._id === 'string';
       }
-      localStorage.removeItem(LOCAL_STATS_KEY);
-      await syncDown();
-    } catch {
-      // Optionally handle error (e.g., show toast)
-    }
+      const unsynced = localEntries.filter(entry => !hasId(entry));
+      if (unsynced.length > 0) {
+        await mergeUserSyncData({ stats: { completed: unsynced } });
+      }
+      // Only sync down if no other merge prompt is open, clear flag then sync
+      if (!mergePromptOpen) {
+        localStorage.removeItem('mergePending');
+        await syncDown();
+        triggerRefresh();
+      }
+    } catch { /* ignore, handled by merge prompt logic */ }
     setMergeStatsPromptOpen(false);
     setMergeStatsDiff(null);
   };
 
-  // Skip action: just close prompt and sync down
+  // Skip action: just close prompt and sync down if needed
   const handleSkipMergeStats = async () => {
     setMergeStatsPromptOpen(false);
     setMergeStatsDiff(null);
-    await syncDown();
+    if (!mergePromptOpen) {
+      localStorage.removeItem('mergePending');
+      await syncDown();
+      triggerRefresh();
+    }
   };
 
   const renderStatsDiff = () => {
@@ -227,9 +248,12 @@ function App() {
 
   // Helper to sync down latest data from server
   const syncDown = async () => {
+    if (isMergePendingStorage()) return; // Do not sync down if merge is pending
     const { settings, stats } = await getUserSyncData();
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(settings));
-    localStorage.setItem(LOCAL_STATS_KEY, JSON.stringify(stats.completed));
+    if (!isMergePendingStorage()) {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(settings));
+      localStorage.setItem(LOCAL_STATS_KEY, JSON.stringify(stats.completed));
+    }
   };
 
   return (

@@ -15,4 +15,9 @@ export const RefreshProvider: React.FC<{ children: React.ReactNode }> = ({ child
       {children}
     </RefreshContext.Provider>
   );
-}; 
+};
+
+// Helper to check merge pending from storage (for non-React code and effects)
+export function isMergePendingStorage() {
+  return localStorage.getItem('mergePending') === '1';
+} 

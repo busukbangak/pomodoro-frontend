@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getCompletedPomodoros, getAllCompletedPomodoros, getToken } from '../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { useRefresh } from '../contexts/RefreshContext';
+import { useRefresh, isMergePendingStorage } from '../contexts/RefreshContext';
 
 const LOCAL_STATS_KEY = 'pomodoro-stats';
 
@@ -74,7 +74,9 @@ const Stats: React.FC = () => {
             : [];
           const total = validEntries.reduce((sum, entry) => sum + entry.pomodoroDuration, 0);
           setTotalDuration(total);
-          localStorage.setItem('pomodoro-stats', JSON.stringify(validEntries));
+          if (!isMergePendingStorage()) {
+            localStorage.setItem('pomodoro-stats', JSON.stringify(validEntries));
+          }
         })
         .catch((err) => {
           if (!navigator.onLine) {
@@ -108,7 +110,7 @@ const Stats: React.FC = () => {
       setTotalDuration(localEntries.reduce((total, entry) => total + entry.pomodoroDuration, 0));
       setLoading(false);
     }
-  }, [isLoggedIn, refreshKey]);
+  }, [isLoggedIn, refreshKey, isMergePendingStorage()]);
 
   useEffect(() => {
     const handleOffline = () => setError('No network: offline, cannot sync now.');
