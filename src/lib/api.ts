@@ -106,4 +106,16 @@ export async function getUserSyncData() {
 export async function mergeUserSyncData(data: { settings?: Partial<UserSettings & { lastUpdated?: string }>; stats?: { completed: { timestamp: string; pomodoroDuration: number }[] } }) {
   const res = await api.post('/stats/sync', data);
   return res.data; // { settings, stats }
+}
+
+// Export backup from server (for logged-in users)
+export async function exportServerBackup() {
+  const res = await api.get('/stats/backup');
+  return res.data; // { version, timestamp, settings, stats }
+}
+
+// Import backup to server (for logged-in users)
+export async function importServerBackup(backupData: { settings: UserSettings; stats: { completed: { timestamp: string; pomodoroDuration: number }[] } }) {
+  const res = await api.post('/stats/backup', backupData);
+  return res.data; // { message, settings, stats }
 } 
