@@ -28,7 +28,8 @@ export default defineConfig({
               }
             }
           }
-        ]
+        ],
+        navigateFallback: '/index.html',
       },
       manifest: {
         name: 'Pomodoro App',
