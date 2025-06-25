@@ -1,3 +1,4 @@
+// @ts-expect-error: virtual:pwa-register is a Vite virtual module
 import { registerSW } from 'virtual:pwa-register';
 registerSW();
 import { createRoot } from 'react-dom/client'
